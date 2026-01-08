@@ -6,17 +6,24 @@ use App\Models\MediationSession;
 use App\Models\Message;
 use App\Models\Participant;
 use App\Services\MediationService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
 
 class SessionController extends Controller
 {
+    private const FREE_ACTIVE_ROOMS_LIMIT = 1;
+    private const PREMIUM_ACTIVE_ROOMS_LIMIT = 10;
+
     /**
      * Show the create session form
      */
     public function create()
     {
-        return view('session.create');
+        return view('session.create', [
+            'activeSession' => $this->getActiveSessionForGuest(),
+        ]);
     }
 
     /**
@@ -29,6 +36,10 @@ public function store(Request $request)
         // Make optional so landing page can create session without extra step
         'conflict_type' => 'nullable|in:relationship,family,roommate,workplace,friendship,other',
     ]);
+
+    if ($redirect = $this->denyIfRoomLimitReached()) {
+        return $redirect;
+    }
 
     $conflictType = $validated['conflict_type'] ?? 'other';
 
@@ -47,11 +58,8 @@ public function store(Request $request)
         'role' => 'user1',
     ]);
 
-    // Store participant ID + session code (guest + simple tracking)
-    session([
-        'participant_id' => $creator->id,
-        'session_code' => $session->code,
-    ]);
+    // Store participant per-session (supports multiple rooms per browser)
+    $this->rememberParticipant($session->code, $creator->id);
 
     return redirect()->route('session.room', $session->code);
 }
@@ -60,7 +68,9 @@ public function store(Request $request)
      */
     public function join()
     {
-        return view('session.join');
+        return view('session.join', [
+            'activeSession' => $this->getActiveSessionForGuest(),
+        ]);
     }
 
     /**
@@ -81,6 +91,30 @@ public function store(Request $request)
             return back()->withErrors(['code' => 'Session not found. Please check the code.']);
         }
 
+        // If already joined in this browser (or logged in), just go to the room.
+        $existingParticipantId = $this->participantIdForCode($code);
+        if ($existingParticipantId) {
+            $existingParticipant = Participant::find($existingParticipantId);
+            if ($existingParticipant && $existingParticipant->session_id === $session->id) {
+                $this->rememberParticipant($code, $existingParticipant->id);
+                return redirect()->route('session.room', $code);
+            }
+        }
+
+        if (Auth::check()) {
+            $existingByUser = Participant::where('session_id', $session->id)
+                ->where('user_id', Auth::id())
+                ->first();
+            if ($existingByUser) {
+                $this->rememberParticipant($code, $existingByUser->id);
+                return redirect()->route('session.room', $code);
+            }
+        }
+
+        if ($redirect = $this->denyIfRoomLimitReached()) {
+            return $redirect;
+        }
+
         if ($session->status !== MediationSession::STATUS_WAITING) {
             return back()->withErrors(['code' => 'This session already has two participants or has ended.']);
         }
@@ -96,9 +130,8 @@ public function store(Request $request)
         // Update session status to start
         $session->update(['status' => MediationSession::STATUS_USER1_TURN]);
 
-        // Store for guest users
-        session(['participant_id' => $participant->id]);
-        session(['session_code' => $session->code]);
+        // Store participant per-session (supports multiple rooms per browser)
+        $this->rememberParticipant($session->code, $participant->id);
 
         return redirect()->route('session.room', $session->code);
     }
@@ -113,12 +146,16 @@ public function store(Request $request)
             ->firstOrFail();
 
         // Determine current participant
-        $participantId = session('participant_id');
-        $currentParticipant = $session->participants->firstWhere('id', $participantId);
+        $participantId = $this->participantIdForCode($code);
+        $currentParticipant = $participantId ? $session->participants->firstWhere('id', $participantId) : null;
 
         // If logged in, try to match by user_id
         if (!$currentParticipant && Auth::check()) {
             $currentParticipant = $session->participants->firstWhere('user_id', Auth::id());
+        }
+
+        if ($currentParticipant) {
+            $this->rememberParticipant($code, $currentParticipant->id);
         }
 
         $user1 = $session->user1();
@@ -162,7 +199,7 @@ public function store(Request $request)
         $session = MediationSession::where('code', $code)->firstOrFail();
 
         // Get current participant
-        $participantId = session('participant_id');
+        $participantId = $this->participantIdForCode($code) ?? session('participant_id');
         $participant = Participant::find($participantId);
 
         if (!$participant || $participant->session_id !== $session->id) {
@@ -211,7 +248,7 @@ public function store(Request $request)
         $session = MediationSession::where('code', $code)->firstOrFail();
 
         // Verify participant
-        $participantId = session('participant_id');
+        $participantId = $this->participantIdForCode($code) ?? session('participant_id');
         $participant = Participant::find($participantId);
 
         if (!$participant || $participant->session_id !== $session->id) {
@@ -221,5 +258,206 @@ public function store(Request $request)
         $session->update(['status' => MediationSession::STATUS_COMPLETED]);
 
         return redirect()->route('session.room', $code);
+    }
+
+    public function rooms(): View
+    {
+        $sessionsByCode = collect();
+
+        // Only show browser-based sessions if user is logged in
+        // This prevents session data from previous users leaking to new guests
+        if (Auth::check()) {
+            $browserCodes = $this->browserSessionCodes();
+            if ($browserCodes !== []) {
+                $browserSessions = MediationSession::query()
+                    ->whereIn('code', $browserCodes)
+                    ->with(['participants'])
+                    ->get();
+
+                $sessionsByCode = $sessionsByCode->merge($browserSessions->keyBy('code'));
+            }
+
+            $participantSessions = Participant::query()
+                ->where('user_id', Auth::id())
+                ->with(['session.participants'])
+                ->get()
+                ->map(fn (Participant $p) => $p->session)
+                ->filter()
+                ->unique('id');
+
+            $userSessions = $participantSessions->values();
+            $sessionsByCode = $sessionsByCode->merge($userSessions->keyBy('code'));
+        }
+
+        $sessions = $sessionsByCode->values()->sortByDesc('updated_at')->values();
+
+        $items = $sessions->map(function (MediationSession $session) {
+            $role = null;
+            $displayName = null;
+
+            if (Auth::check()) {
+                $participant = $session->participants->firstWhere('user_id', Auth::id());
+                if ($participant) {
+                    $role = $participant->role;
+                    $displayName = $participant->name;
+                }
+            }
+
+            if (!$role) {
+                $participantId = $this->participantIdForCode($session->code);
+                if ($participantId) {
+                    $participant = $session->participants->firstWhere('id', $participantId);
+                    if ($participant) {
+                        $role = $participant->role;
+                        $displayName = $participant->name;
+                    }
+                }
+            }
+
+            return [
+                'code' => $session->code,
+                'status' => $session->status,
+                'conflict_type' => $session->conflict_type,
+                'updated_at' => $session->updated_at,
+                'role' => $role,
+                'name' => $displayName,
+                'is_active' => $session->status !== MediationSession::STATUS_COMPLETED,
+            ];
+        });
+
+        return view('rooms.index', [
+            'rooms' => $items,
+            'activeCount' => $this->activeRoomsCount(),
+            'activeLimit' => $this->activeRoomsLimit(),
+            'isPremium' => (bool) (Auth::user()?->is_premium),
+            'isLoggedIn' => Auth::check(),
+        ]);
+    }
+
+    private function participantIdForCode(string $code): ?int
+    {
+        $participants = session('participants', []);
+        if (!is_array($participants)) {
+            $participants = [];
+        }
+
+        $code = strtoupper($code);
+        $participantId = $participants[$code] ?? null;
+
+        if (!$participantId && session('session_code') === $code) {
+            $participantId = session('participant_id');
+        }
+
+        return is_numeric($participantId) ? (int) $participantId : null;
+    }
+
+    private function browserSessionCodes(): array
+    {
+        $participants = session('participants', []);
+        if (!is_array($participants)) {
+            $participants = [];
+        }
+
+        $codes = array_keys($participants);
+
+        $legacyCode = session('session_code');
+        if (is_string($legacyCode) && $legacyCode !== '' && !in_array(strtoupper($legacyCode), $codes, true)) {
+            $codes[] = strtoupper($legacyCode);
+        }
+
+        return array_values(array_unique(array_map('strtoupper', $codes)));
+    }
+
+    private function rememberParticipant(string $code, int $participantId): void
+    {
+        $participants = session('participants', []);
+        if (!is_array($participants)) {
+            $participants = [];
+        }
+
+        $code = strtoupper($code);
+        $participants[$code] = $participantId;
+
+        session([
+            'participants' => $participants,
+            // keep legacy keys for backwards-compat + convenience
+            'participant_id' => $participantId,
+            'session_code' => $code,
+            'last_session_code' => $code,
+        ]);
+    }
+
+    private function denyIfRoomLimitReached(): ?RedirectResponse
+    {
+        $limit = $this->activeRoomsLimit();
+        if ($this->activeRoomsCount() < $limit) {
+            return null;
+        }
+
+        $message = $limit === self::FREE_ACTIVE_ROOMS_LIMIT
+            ? 'Free users can only have 1 active room. End your current session to start another, or upgrade to Premium.'
+            : "You’ve reached your active room limit ({$limit}). End a session to start another.";
+
+        return back()->withErrors(['room_limit' => $message])->withInput();
+    }
+
+    private function activeRoomsLimit(): int
+    {
+        $user = Auth::user();
+        if ($user && (bool) $user->is_premium) {
+            return self::PREMIUM_ACTIVE_ROOMS_LIMIT;
+        }
+
+        return self::FREE_ACTIVE_ROOMS_LIMIT;
+    }
+
+    private function activeRoomsCount(): int
+    {
+        $browserCount = $this->countActiveRoomsForBrowser();
+        $userCount = Auth::check() ? $this->countActiveRoomsForUser() : 0;
+
+        return max($browserCount, $userCount);
+    }
+
+    private function countActiveRoomsForBrowser(): int
+    {
+        $codes = $this->browserSessionCodes();
+
+        if ($codes === []) {
+            return 0;
+        }
+
+        return MediationSession::query()
+            ->whereIn('code', $codes)
+            ->where('status', '!=', MediationSession::STATUS_COMPLETED)
+            ->count();
+    }
+
+    private function countActiveRoomsForUser(): int
+    {
+        return Participant::query()
+            ->where('user_id', Auth::id())
+            ->whereHas('session', function ($query) {
+                $query->where('status', '!=', MediationSession::STATUS_COMPLETED);
+            })
+            ->distinct()
+            ->count('session_id');
+    }
+
+    /**
+     * Get the first active session for the current browser (guest users)
+     */
+    private function getActiveSessionForGuest(): ?MediationSession
+    {
+        $codes = $this->browserSessionCodes();
+
+        if ($codes === []) {
+            return null;
+        }
+
+        return MediationSession::query()
+            ->whereIn('code', $codes)
+            ->where('status', '!=', MediationSession::STATUS_COMPLETED)
+            ->first();
     }
 }

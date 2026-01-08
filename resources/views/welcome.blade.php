@@ -32,6 +32,8 @@
                     Pricing
                 </a>
 
+                <a href="{{ route('rooms') }}" class="text-slate-600 hover:text-slate-800">Rooms</a>
+
                 @auth
                     <a href="{{ route('dashboard') }}" class="text-slate-600 hover:text-slate-800">Dashboard</a>
                     <form method="POST" action="{{ route('logout') }}" class="inline">
@@ -47,6 +49,31 @@
             </div>
         </div>
     </nav>
+
+    @if ($errors->any())
+        <div class="max-w-6xl mx-auto px-4 pt-6">
+            <div class="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl">
+                @foreach ($errors->all() as $error)
+                    <p class="text-sm font-medium">{{ $error }}</p>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
+    @if ($activeSession ?? false)
+        <div class="max-w-6xl mx-auto px-4 pt-6">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-amber-800">You have an active session</p>
+                    <p class="text-sm text-amber-600">Code: {{ $activeSession->code }} &bull; {{ ucfirst($activeSession->conflict_type) }}</p>
+                </div>
+                <a href="{{ route('session.room', $activeSession->code) }}"
+                   class="bg-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-700 transition-colors">
+                    Rejoin Session
+                </a>
+            </div>
+        </div>
+    @endif
 
     <!-- Hero -->
     <main class="max-w-6xl mx-auto px-4 py-14 md:py-16">

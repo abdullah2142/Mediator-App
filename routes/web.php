@@ -2,11 +2,21 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SessionController;
+use App\Models\MediationSession;
 use Illuminate\Support\Facades\Route;
 
 // Landing page
 Route::get('/', function () {
-    return view('welcome');
+    $activeSession = null;
+    $participants = session('participants', []);
+    if (is_array($participants) && count($participants) > 0) {
+        $codes = array_keys($participants);
+        $activeSession = MediationSession::query()
+            ->whereIn('code', $codes)
+            ->where('status', '!=', MediationSession::STATUS_COMPLETED)
+            ->first();
+    }
+    return view('welcome', ['activeSession' => $activeSession]);
 })->name('home');
 
 // Session routes (no auth required - supports guest mode)
@@ -18,6 +28,7 @@ Route::get('/session/{code}', [SessionController::class, 'room'])->name('session
 Route::post('/session/{code}/message', [SessionController::class, 'sendMessage'])->name('session.message');
 Route::post('/session/{code}/end', [SessionController::class, 'end'])->name('session.end');
 Route::view('/pricing', 'pricing')->name('pricing');
+Route::get('/rooms', [SessionController::class, 'rooms'])->name('rooms');
 
 // Dashboard (for logged in users)
 Route::get('/dashboard', function () {

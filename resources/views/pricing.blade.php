@@ -23,6 +23,7 @@
 
             <div class="flex items-center gap-4">
                 <a href="{{ route('pricing') }}" class="text-slate-600 hover:text-slate-800">Pricing</a>
+                <a href="{{ route('rooms') }}" class="text-slate-600 hover:text-slate-800">Rooms</a>
 
                 @auth
                     <a href="{{ route('dashboard') }}" class="text-slate-600 hover:text-slate-800">Dashboard</a>

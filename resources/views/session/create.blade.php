@@ -22,6 +22,19 @@
     </nav>
 
     <main class="max-w-md mx-auto px-4 py-16">
+        @if ($activeSession)
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-amber-800">You have an active session</p>
+                    <p class="text-sm text-amber-600">Code: {{ $activeSession->code }}</p>
+                </div>
+                <a href="{{ route('session.room', $activeSession->code) }}"
+                   class="bg-amber-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-amber-700 transition-colors">
+                    Rejoin
+                </a>
+            </div>
+        @endif
+
         <div class="bg-white rounded-2xl shadow-xl p-8">
             <h1 class="text-2xl font-bold text-slate-800 mb-2">Start a Mediation Session</h1>
             <p class="text-slate-600 mb-6">Create a new session and invite the other person to join.</p>
