@@ -22,35 +22,39 @@ class SessionController extends Controller
     /**
      * Store a new session
      */
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:50',
-            'conflict_type' => 'required|in:relationship,family,roommate,workplace,friendship,other',
-        ]);
+public function store(Request $request)
+{
+    $validated = $request->validate([
+        'name' => 'required|string|max:50',
+        // Make optional so landing page can create session without extra step
+        'conflict_type' => 'nullable|in:relationship,family,roommate,workplace,friendship,other',
+    ]);
 
-        // Create session with unique code
-        $session = MediationSession::create([
-            'code' => MediationSession::generateCode(),
-            'status' => MediationSession::STATUS_WAITING,
-            'conflict_type' => $validated['conflict_type'],
-        ]);
+    $conflictType = $validated['conflict_type'] ?? 'other';
 
-        // Add creator as first participant
-        Participant::create([
-            'session_id' => $session->id,
-            'user_id' => Auth::id(), // null for guests
-            'name' => $validated['name'],
-            'role' => 'user1',
-        ]);
+    // Create session with unique code
+    $session = MediationSession::create([
+        'code' => MediationSession::generateCode(),
+        'status' => MediationSession::STATUS_WAITING,
+        'conflict_type' => $conflictType,
+    ]);
 
-        // Store participant ID in session for guest users
-        session(['participant_id' => $session->participants()->first()->id]);
-        session(['session_code' => $session->code]);
+    // Add creator as first participant
+    $creator = Participant::create([
+        'session_id' => $session->id,
+        'user_id' => Auth::id(), // null for guests
+        'name' => $validated['name'],
+        'role' => 'user1',
+    ]);
 
-        return redirect()->route('session.room', $session->code);
-    }
+    // Store participant ID + session code (guest + simple tracking)
+    session([
+        'participant_id' => $creator->id,
+        'session_code' => $session->code,
+    ]);
 
+    return redirect()->route('session.room', $session->code);
+}
     /**
      * Show the join session form
      */

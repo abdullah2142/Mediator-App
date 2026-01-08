@@ -99,12 +99,13 @@
                 </div>
 
                 <div class="grid md:grid-cols-2 gap-4">
-                    <!-- Create -->
+                    <!-- Create (DIRECT POST to session.store) -->
                     <div class="border border-slate-200 rounded-2xl p-4">
                         <h3 class="font-semibold text-slate-800 mb-2">Create a session</h3>
                         <p class="text-sm text-slate-600 mb-3">Get a code and share it with the other person.</p>
 
-                        <form action="{{ route('session.create') }}" method="GET" class="space-y-3">
+                        <form action="{{ route('session.store') }}" method="POST" class="space-y-3">
+                            @csrf
                             <div>
                                 <label for="create_name" class="block text-sm font-medium text-slate-700 mb-1">
                                     Your name
@@ -112,6 +113,7 @@
                                 <input id="create_name"
                                        name="name"
                                        type="text"
+                                       required
                                        placeholder="e.g., Rayhan"
                                        class="w-full rounded-xl border-slate-200 focus:border-teal-400 focus:ring-teal-400"
                                        autocomplete="name">
@@ -119,17 +121,18 @@
 
                             <button type="submit"
                                     class="w-full bg-gradient-to-r from-teal-600 to-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:shadow-lg hover:shadow-teal-500/20 transition-all">
-                                Create & get code
+                                Create &amp; get code
                             </button>
                         </form>
                     </div>
 
-                    <!-- Join -->
+                    <!-- Join (DIRECT POST to session.doJoin) -->
                     <div class="border border-slate-200 rounded-2xl p-4">
                         <h3 class="font-semibold text-slate-800 mb-2">Join a session</h3>
                         <p class="text-sm text-slate-600 mb-3">Enter the code you received.</p>
 
-                        <form action="{{ route('session.join') }}" method="GET" class="space-y-3">
+                        <form action="{{ route('session.doJoin') }}" method="POST" class="space-y-3">
+                            @csrf
                             <div>
                                 <label for="join_name" class="block text-sm font-medium text-slate-700 mb-1">
                                     Your name
@@ -137,6 +140,7 @@
                                 <input id="join_name"
                                        name="name"
                                        type="text"
+                                       required
                                        placeholder="e.g., Sam"
                                        class="w-full rounded-xl border-slate-200 focus:border-teal-400 focus:ring-teal-400"
                                        autocomplete="name">
@@ -149,8 +153,9 @@
                                 <input id="join_code"
                                        name="code"
                                        type="text"
+                                       required
                                        placeholder="Enter code"
-                                       class="w-full rounded-xl border-slate-200 focus:border-teal-400 focus:ring-teal-400 font-mono tracking-wider"
+                                       class="w-full rounded-xl border-slate-200 focus:border-teal-400 focus:ring-teal-400 font-mono tracking-wider uppercase"
                                        autocomplete="one-time-code"
                                        inputmode="text">
                             </div>
@@ -430,7 +435,7 @@
         </div>
     </div>
 
-    <!-- Small inline JS for modal (keeps it simple for hackday) -->
+    <!-- Small inline JS for modal -->
     <script>
         (function () {
             const btn = document.getElementById('demoBtn');
@@ -458,7 +463,7 @@
             closeBottom?.addEventListener('click', closeModal);
 
             start?.addEventListener('click', function () {
-                // Send users to your existing create flow
+                // Direct users to your Create SESSION PAGE (or change to POST flow if you want)
                 window.location.href = "{{ route('session.create') }}";
             });
 
