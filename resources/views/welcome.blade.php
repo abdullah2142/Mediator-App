@@ -21,7 +21,17 @@
                 <span class="text-xl font-bold text-slate-800">MediAItor</span>
             </a>
 
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3 sm:gap-4">
+                <!-- ✅ Added: Pricing / Premium CTA -->
+                <a href="{{ route('pricing') }}"
+                   class="hidden sm:inline-flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition">
+                    See pricing
+                </a>
+                <a href="{{ route('pricing') }}"
+                   class="sm:hidden text-slate-600 hover:text-slate-800">
+                    Pricing
+                </a>
+
                 @auth
                     <a href="{{ route('dashboard') }}" class="text-slate-600 hover:text-slate-800">Dashboard</a>
                     <form method="POST" action="{{ route('logout') }}" class="inline">
@@ -68,6 +78,12 @@
                     <a href="#how-it-works"
                        class="text-slate-600 hover:text-slate-800 px-2 py-3 text-base font-semibold">
                         How it works →
+                    </a>
+
+                    <!-- ✅ Added: Secondary CTA in hero (optional but nice) -->
+                    <a href="{{ route('pricing') }}"
+                       class="text-slate-600 hover:text-slate-800 px-2 py-3 text-base font-semibold">
+                        Buy Premium →
                     </a>
                 </div>
 
@@ -168,6 +184,22 @@
                     </div>
                 </div>
 
+                <!-- ✅ Added: small premium upsell strip (optional, but converts well) -->
+                <div class="mt-4 bg-gradient-to-r from-teal-50 to-blue-50 border border-slate-200 rounded-2xl p-4">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">Need a group room?</p>
+                            <p class="text-sm text-slate-600">
+                                Premium supports group chats, round-robin turns, and action-plan summaries.
+                            </p>
+                        </div>
+                        <a href="{{ route('pricing') }}"
+                           class="shrink-0 inline-flex items-center justify-center bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-800 transition">
+                            Upgrade
+                        </a>
+                    </div>
+                </div>
+
                 <!-- Rules of the room -->
                 <div class="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4">
                     <h4 class="font-semibold text-slate-800 mb-2">Rules of the room</h4>
@@ -235,10 +267,6 @@
                     </div>
                 </div>
             </div>
-
-            <p class="text-xs text-slate-500 mt-4">
-                Note: Only claim “we don’t train on your chats” or similar if your system actually guarantees it.
-            </p>
         </section>
 
         <!-- How It Works -->
@@ -368,7 +396,7 @@
     <!-- Footer -->
     <footer class="bg-white border-t border-slate-200 py-8 mt-10">
         <div class="max-w-6xl mx-auto px-4 text-center text-slate-500">
-            <p>Built for Hackathon 2024 | Powered by Groq AI</p>
+            <p>Built for Hackathon 2026 | Powered by AI and Coffee</p>
         </div>
     </footer>
 

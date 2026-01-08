@@ -17,6 +17,7 @@ Route::post('/session/join', [SessionController::class, 'doJoin'])->name('sessio
 Route::get('/session/{code}', [SessionController::class, 'room'])->name('session.room');
 Route::post('/session/{code}/message', [SessionController::class, 'sendMessage'])->name('session.message');
 Route::post('/session/{code}/end', [SessionController::class, 'end'])->name('session.end');
+Route::view('/pricing', 'pricing')->name('pricing');
 
 // Dashboard (for logged in users)
 Route::get('/dashboard', function () {
