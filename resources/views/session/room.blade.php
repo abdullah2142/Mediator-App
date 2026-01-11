@@ -320,6 +320,89 @@
                 <a href="{{ route('home') }}" class="mt-4 inline-block text-sm font-semibold text-teal-700 hover:underline">Return to home</a>
             </section>
         @endif
+
+        <!-- Memory Save Modal (Premium feature) -->
+        @if($canSaveMemory && !$hasMemoryForSession)
+            <div x-show="showMemoryModal"
+                 x-cloak
+                 class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-150"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0">
+                <!-- Overlay -->
+                <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" @click="showMemoryModal = false"></div>
+
+                <!-- Modal -->
+                <div class="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0 scale-95"
+                     x-transition:enter-end="opacity-100 scale-100">
+                    <div class="mb-4 flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600">
+                            <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">Save to Dr. Harmony's Memory?</h3>
+                            <p class="text-sm text-slate-500">Premium feature</p>
+                        </div>
+                    </div>
+
+                    <p class="mb-5 text-sm text-slate-600">
+                        Dr. Harmony can remember this session to provide better insights in future conversations.
+                    </p>
+
+                    <div class="mb-5 space-y-2">
+                        <label class="block text-sm font-medium text-slate-700">What would you like to save?</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button"
+                                    @click="memorySaveLevel = 'all'"
+                                    :class="memorySaveLevel === 'all' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                    class="rounded-xl border px-3 py-3 text-sm font-medium transition">
+                                <div class="font-semibold">Everything</div>
+                                <div class="text-xs opacity-70">Full record</div>
+                            </button>
+                            <button type="button"
+                                    @click="memorySaveLevel = 'summary'"
+                                    :class="memorySaveLevel === 'summary' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                    class="rounded-xl border px-3 py-3 text-sm font-medium transition">
+                                <div class="font-semibold">Summary</div>
+                                <div class="text-xs opacity-70">Key points</div>
+                            </button>
+                            <button type="button"
+                                    @click="memorySaveLevel = 'none'"
+                                    :class="memorySaveLevel === 'none' ? 'border-slate-500 bg-slate-50 text-slate-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                    class="rounded-xl border px-3 py-3 text-sm font-medium transition">
+                                <div class="font-semibold">Nothing</div>
+                                <div class="text-xs opacity-70">Don't save</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3">
+                        <button type="button"
+                                @click="showMemoryModal = false"
+                                class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                            Later
+                        </button>
+                        <button type="button"
+                                @click="saveMemory()"
+                                :disabled="memorySaving"
+                                class="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:shadow-lg disabled:opacity-50 transition">
+                            <span x-show="!memorySaving">Save Memory</span>
+                            <span x-show="memorySaving">Saving...</span>
+                        </button>
+                    </div>
+
+                    <p x-show="memoryError" class="mt-3 text-sm text-rose-600" x-text="memoryError"></p>
+                    <p x-show="memorySaved" class="mt-3 text-sm text-emerald-600">Memory saved successfully!</p>
+                </div>
+            </div>
+        @endif
     </main>
 
     <script>
@@ -365,6 +448,16 @@
                 currentRole: @json($currentParticipant?->role ?? ""),
                 pollInterval: null,
                 content: "",
+
+                // Memory feature state
+                showMemoryModal: false,
+                memorySaveLevel: @json($defaultSaveLevel ?? 'summary'),
+                memorySaving: false,
+                memorySaved: false,
+                memoryError: "",
+                canSaveMemory: @json($canSaveMemory ?? false),
+                hasMemoryForSession: @json($hasMemoryForSession ?? false),
+                partnerName: @json($partnerName ?? ''),
 
                 get canWrite() {
                     return this.isMyTurn && this.status !== 'ai_responding' && this.status !== 'completed';
@@ -451,6 +544,13 @@
                             if (data.messages.length > prevLen) {
                                 requestAnimationFrame(() => this.scrollToBottom());
                             }
+
+                            // If session just completed, show memory modal for premium users
+                            if (prevStatus !== 'completed' && data.status === 'completed') {
+                                if (this.canSaveMemory && !this.hasMemoryForSession) {
+                                    setTimeout(() => this.showMemoryModal = true, 500);
+                                }
+                            }
                         }
                     } catch (error) {
                         console.error('Polling error:', error);
@@ -462,10 +562,51 @@
                     requestAnimationFrame(() => this.scrollToBottom());
                     // Poll every 3s
                     this.pollInterval = setInterval(() => this.fetchStatus(), 3000);
+
+                    // If session is already completed and user can save memory, show modal
+                    if (this.status === 'completed' && this.canSaveMemory && !this.hasMemoryForSession) {
+                        setTimeout(() => this.showMemoryModal = true, 500);
+                    }
                 },
 
                 stopPolling() {
                     if (this.pollInterval) clearInterval(this.pollInterval);
+                },
+
+                async saveMemory() {
+                    this.memorySaving = true;
+                    this.memoryError = "";
+
+                    try {
+                        const response = await fetch('/session/{{ $session->code }}/save-memory', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                            },
+                            body: JSON.stringify({
+                                save_level: this.memorySaveLevel,
+                                partner_name: this.partnerName
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            this.memorySaved = true;
+                            this.hasMemoryForSession = true;
+                            setTimeout(() => {
+                                this.showMemoryModal = false;
+                            }, 1500);
+                        } else {
+                            this.memoryError = data.error || 'Failed to save memory';
+                        }
+                    } catch (error) {
+                        this.memoryError = 'Network error. Please try again.';
+                        console.error('Save memory error:', error);
+                    } finally {
+                        this.memorySaving = false;
+                    }
                 }
             };
         }

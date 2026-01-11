@@ -4,15 +4,19 @@ namespace App\Services;
 
 use App\Models\MediationSession;
 use App\Models\Message;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class MediationService
 {
     private GroqService $groq;
+    private MemoryService $memoryService;
 
-    public function __construct(GroqService $groq)
+    public function __construct(GroqService $groq, MemoryService $memoryService)
     {
         $this->groq = $groq;
+        $this->memoryService = $memoryService;
     }
 
     /**
@@ -42,8 +46,14 @@ class MediationService
         // Build previous rounds summary
         $previousSummary = $this->buildPreviousSummary($session, $round);
 
-        // Build the system prompt
+        // Build the system prompt with memory context if available
         $systemPrompt = $this->buildSystemPrompt();
+
+        // Inject memory context for premium users
+        $memoryContext = $this->buildMemoryContext($session);
+        if ($memoryContext) {
+            $systemPrompt .= "\n\n" . $memoryContext;
+        }
 
         // Build user message with context
         $userMessage = $this->buildUserMessage(
@@ -60,6 +70,37 @@ class MediationService
             'temperature' => 0.7,
             'max_tokens' => 1024,
         ]);
+    }
+
+    /**
+     * Build memory context from participants' saved memories
+     */
+    private function buildMemoryContext(MediationSession $session): ?string
+    {
+        $contexts = [];
+
+        // Check each participant for memory context
+        foreach ($session->participants as $participant) {
+            if (!$participant->user_id) {
+                continue; // Skip guest participants
+            }
+
+            $user = User::find($participant->user_id);
+            if (!$user || !$user->hasMemoryEnabled()) {
+                continue;
+            }
+
+            $memoryContext = $this->memoryService->getMemoryContext($user, $session->conflict_type);
+            if ($memoryContext) {
+                $contexts[] = "--- Memory context for {$participant->name} ({$participant->role}) ---\n" . $memoryContext;
+            }
+        }
+
+        if (empty($contexts)) {
+            return null;
+        }
+
+        return implode("\n\n", $contexts);
     }
 
     /**

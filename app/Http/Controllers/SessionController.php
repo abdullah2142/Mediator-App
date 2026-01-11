@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\MediationSession;
 use App\Models\Message;
 use App\Models\Participant;
+use App\Models\UserMemory;
 use App\Services\MediationService;
+use App\Services\MemoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -177,13 +179,33 @@ public function store(Request $request)
             ];
         })->values();
 
+        // Memory feature data (for premium users)
+        $user = Auth::user();
+        $canSaveMemory = $user && $user->is_premium;
+        $hasMemoryForSession = $canSaveMemory && UserMemory::where('user_id', $user->id)
+            ->where('session_id', $session->id)
+            ->exists();
+        $defaultSaveLevel = $user?->getDefaultSaveLevel() ?? 'summary';
+
+        // Get partner name for memory save
+        $partnerName = null;
+        if ($currentParticipant) {
+            $otherRole = $currentParticipant->role === 'user1' ? 'user2' : 'user1';
+            $partner = $session->participants->firstWhere('role', $otherRole);
+            $partnerName = $partner?->name;
+        }
+
         return view('session.room', compact(
             'session',
             'currentParticipant',
             'user1',
             'user2',
             'messagesByRound',
-            'messagesJson'
+            'messagesJson',
+            'canSaveMemory',
+            'hasMemoryForSession',
+            'defaultSaveLevel',
+            'partnerName'
         ));
     }
 
@@ -258,6 +280,55 @@ public function store(Request $request)
         $session->update(['status' => MediationSession::STATUS_COMPLETED]);
 
         return redirect()->route('session.room', $code);
+    }
+
+    /**
+     * Save memory from a completed session (Premium feature)
+     */
+    public function saveMemory(Request $request, string $code, MemoryService $memoryService)
+    {
+        $user = Auth::user();
+
+        if (!$user || !$user->is_premium) {
+            return response()->json(['error' => 'Premium feature only'], 403);
+        }
+
+        $validated = $request->validate([
+            'save_level' => 'required|in:all,summary,none',
+            'partner_name' => 'nullable|string|max:50',
+        ]);
+
+        $session = MediationSession::where('code', $code)->firstOrFail();
+
+        // Check if already saved
+        $existing = UserMemory::where('user_id', $user->id)
+            ->where('session_id', $session->id)
+            ->exists();
+
+        if ($existing) {
+            return response()->json(['error' => 'Memory already saved for this session'], 409);
+        }
+
+        if ($validated['save_level'] === 'none') {
+            return response()->json(['success' => true, 'message' => 'No memory saved']);
+        }
+
+        $memory = $memoryService->saveMemory(
+            $user,
+            $session,
+            $validated['save_level'],
+            $validated['partner_name'] ?? null
+        );
+
+        if (!$memory) {
+            return response()->json(['error' => 'Failed to save memory'], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Memory saved successfully',
+            'memory_id' => $memory->id,
+        ]);
     }
 
     public function rooms(): View

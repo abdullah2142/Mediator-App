@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MemoryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SessionController;
 use App\Models\MediationSession;
@@ -27,6 +28,7 @@ Route::post('/session/join', [SessionController::class, 'doJoin'])->name('sessio
 Route::get('/session/{code}', [SessionController::class, 'room'])->name('session.room');
 Route::post('/session/{code}/message', [SessionController::class, 'sendMessage'])->name('session.message');
 Route::post('/session/{code}/end', [SessionController::class, 'end'])->name('session.end');
+Route::post('/session/{code}/save-memory', [SessionController::class, 'saveMemory'])->name('session.saveMemory');
 Route::view('/pricing', 'pricing')->name('pricing');
 Route::get('/rooms', [SessionController::class, 'rooms'])->name('rooms');
 
@@ -40,6 +42,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+// Memory routes (Premium feature)
+Route::middleware('auth')->group(function () {
+    Route::get('/memory', [MemoryController::class, 'index'])->name('memory.index');
+    Route::get('/memory/{memory}', [MemoryController::class, 'show'])->name('memory.show');
+    Route::delete('/memory/{memory}', [MemoryController::class, 'destroy'])->name('memory.destroy');
+    Route::delete('/memory', [MemoryController::class, 'destroyAll'])->name('memory.destroyAll');
+    Route::post('/memory/settings', [MemoryController::class, 'updateSettings'])->name('memory.settings');
 });
 
 require __DIR__.'/auth.php';
