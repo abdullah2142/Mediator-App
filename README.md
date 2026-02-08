@@ -2,6 +2,8 @@
 
 **MediAItor** is a turn-based AI mediation web application designed to help users resolve conflicts constructively. Built during a 5-hour hackathon, it features "Dr. Harmony," an AI mediator powered by Groq's Llama 3.3 70B API, who provides professional, research-backed mediation responses based on Gottman Method and Nonviolent Communication principles.
 
+Screenshots: https://drive.google.com/drive/u/1/folders/1omU94HAnNa_h0Z34EVjXN-1oe-8QK23U
+
 ## Features
 
 -   **Turn-Based Mediation**: Structured 3-step rounds (User 1 -> User 2 -> AI Response).
